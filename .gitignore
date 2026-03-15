@@ -39,3 +39,10 @@
 
 # debug information files
 *.dwo
+
+# vs code
+.claude/
+.cache/
+
+#build files
+build/
