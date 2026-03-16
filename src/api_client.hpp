@@ -3,22 +3,25 @@
 #include <stdint.h>
 
 /**
- * ApiClient — sends the current session data to a remote endpoint.
+ * ApiClient — sends the current session data to a remote HTTP endpoint.
  *
- * Current implementation is a stub: it logs the data over serial.
+ * URL format: http://<host>:<port>/log?counter1=1&counter2=2&counter3=3&category=alpha
  *
- * Future implementation:
- *   Replace the stub body in api_client.cpp with an HTTP GET (or POST)
- *   using the Pico W's lwIP stack. The interface intentionally keeps the
- *   caller decoupled from the transport layer.
- *
- * Example future URL:
- *   http://192.168.1.100/api/count?cat=Alpha&Bier=2&Shot=1
+ * Call init() once after loading config from flash, then send() for each session.
  */
 class ApiClient {
 public:
   /**
-   * Send a session's data.
+   * Configure the API server address.
+   * Must be called before send().
+   *
+   * @param host  IP address string, e.g. "192.168.1.100"
+   * @param port  Port number, e.g. 3000
+   */
+  void init(const char *host, uint16_t port);
+
+  /**
+   * Send a session's data via HTTP GET.
    *
    * @param category      Active category name string.
    * @param ctr_names     Array of counter name strings (length = n).

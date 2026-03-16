@@ -18,6 +18,7 @@ extern "C" {
 
 // ── HTML pages ────────────────────────────────────────────────────────────────
 
+// Format args: ssid, psk, api_host, api_port
 static const char *HTML_FORM_TEMPLATE =
     "HTTP/1.0 200 OK\r\nContent-Type: text/html\r\nConnection: close\r\n\r\n"
     "<!DOCTYPE html><html><head>"
@@ -37,8 +38,10 @@ static const char *HTML_FORM_TEMPLATE =
     "<input type='text' name='ssid' maxlength='63' required value='%s'>"
     "<label>WiFi Password</label>"
     "<input type='password' name='psk' maxlength='63' value='%s'>"
-    "<label>Device UUID</label>"
-    "<input type='text' name='uuid' maxlength='63' value='%s'>"
+    "<label>API Server IP</label>"
+    "<input type='text' name='api_host' maxlength='63' placeholder='192.168.1.100' value='%s'>"
+    "<label>API Server Port</label>"
+    "<input type='text' name='api_port' maxlength='7' placeholder='3000' value='%s'>"
     "<button type='submit'>Save &amp; Reboot</button>"
     "</form></body></html>";
 
@@ -56,7 +59,8 @@ struct WebCtx {
   volatile bool saved;
   char ssid[64];
   char psk[64];
-  char uuid[64];
+  char api_host[64];
+  char api_port[8];
 };
 
 static WebCtx web_ctx;
@@ -79,7 +83,7 @@ static void urlDecode(char *str) {
   *dst = 0;
 }
 
-// Parse "ssid=foo&psk=bar&uuid=baz" into the WebCtx
+// Parse "ssid=foo&psk=bar&uuid=baz&api_host=x&api_port=y" into the WebCtx
 static void parseFormBody(const char *body) {
   char tmp[1024];
   strncpy(tmp, body, sizeof(tmp) - 1);
@@ -93,9 +97,10 @@ static void parseFormBody(const char *body) {
       *eq = 0;
       char *v = eq + 1;
       urlDecode(v);
-      if (!strcmp(pair, "ssid"))      { strncpy(web_ctx.ssid, v, 63); web_ctx.ssid[63] = 0; }
-      else if (!strcmp(pair, "psk"))  { strncpy(web_ctx.psk,  v, 63); web_ctx.psk[63]  = 0; }
-      else if (!strcmp(pair, "uuid")) { strncpy(web_ctx.uuid, v, 63); web_ctx.uuid[63] = 0; }
+      if (!strcmp(pair, "ssid"))          { strncpy(web_ctx.ssid,     v, 63); web_ctx.ssid[63]     = 0; }
+      else if (!strcmp(pair, "psk"))      { strncpy(web_ctx.psk,      v, 63); web_ctx.psk[63]      = 0; }
+      else if (!strcmp(pair, "api_host")) { strncpy(web_ctx.api_host, v, 63); web_ctx.api_host[63] = 0; }
+      else if (!strcmp(pair, "api_port")) { strncpy(web_ctx.api_port, v,  7); web_ctx.api_port[7]  = 0; }
     }
     pair = strtok_r(nullptr, "&", &save);
   }
@@ -111,7 +116,7 @@ static err_t tcpRecv(void *, struct tcp_pcb *pcb, struct pbuf *p, err_t err) {
   char buf[2048];
   pbuf_copy_partial(p, buf, len, 0);
   buf[len] = 0;
-  tcp_recved(pcb, p->tot_len);  // acknowledge received bytes to reopen receive window
+  tcp_recved(pcb, p->tot_len);
   pbuf_free(p);
 
   char method[8] = "", path[64] = "";
@@ -132,7 +137,7 @@ static err_t tcpRecv(void *, struct tcp_pcb *pcb, struct pbuf *p, err_t err) {
   char html[2048];
 
   if (!strcmp(method, "POST") && !strcmp(path, "/")) {
-    web_ctx.ssid[0] = web_ctx.psk[0] = web_ctx.uuid[0] = 0;
+    web_ctx.ssid[0] = web_ctx.psk[0] = web_ctx.api_host[0] = web_ctx.api_port[0] = 0;
     parseFormBody(body);
 
     if (web_ctx.ssid[0]) {
@@ -146,7 +151,8 @@ static err_t tcpRecv(void *, struct tcp_pcb *pcb, struct pbuf *p, err_t err) {
   } else {
     // GET — serve the form pre-filled with current values
     snprintf(html, sizeof(html), HTML_FORM_TEMPLATE,
-             web_ctx.ssid, web_ctx.psk, web_ctx.uuid);
+             web_ctx.ssid, web_ctx.psk,
+             web_ctx.api_host, web_ctx.api_port);
     response = html;
     response_len = strlen(html);
   }
@@ -169,13 +175,14 @@ static err_t tcpAccept(void *, struct tcp_pcb *newpcb, err_t err) {
 // ── Public entry point ────────────────────────────────────────────────────────
 
 void webserverRun(const char *current_ssid, const char *current_psk,
-                  const char *current_uuid) {
+                  const char *current_api_host, const char *current_api_port) {
   printf("=== CONFIG MODE ===\n");
 
   // Pre-fill form with existing values
-  strncpy(web_ctx.ssid, current_ssid, 63); web_ctx.ssid[63] = 0;
-  strncpy(web_ctx.psk,  current_psk,  63); web_ctx.psk[63]  = 0;
-  strncpy(web_ctx.uuid, current_uuid, 63); web_ctx.uuid[63] = 0;
+  strncpy(web_ctx.ssid,     current_ssid,     63); web_ctx.ssid[63]     = 0;
+  strncpy(web_ctx.psk,      current_psk,      63); web_ctx.psk[63]      = 0;
+  strncpy(web_ctx.api_host, current_api_host, 63); web_ctx.api_host[63] = 0;
+  strncpy(web_ctx.api_port, current_api_port,  7); web_ctx.api_port[7]  = 0;
   web_ctx.saved = false;
 
   cyw43_arch_init();
@@ -232,7 +239,7 @@ void webserverRun(const char *current_ssid, const char *current_psk,
   }
 
   printf("Saving config and rebooting...\n");
-  configSave(web_ctx.ssid, web_ctx.psk, web_ctx.uuid);
+  configSave(web_ctx.ssid, web_ctx.psk, web_ctx.api_host, web_ctx.api_port);
 
   sleep_ms(500);
   watchdog_enable(100, 1);

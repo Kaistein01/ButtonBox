@@ -14,6 +14,7 @@
 #include "tft_display.hpp"
 #include "webserver.hpp"
 #include "wifi_status.hpp"
+#include <cstdlib>
 
 int main() {
   stdio_init_all();
@@ -59,13 +60,14 @@ int main() {
     display.showSetupMode();
 
     // Load current config (or use defaults)
-    char ssid[64] = "AP1";
-    char psk[64] = "1154542275109433";
-    char uuid[64] = "";
-    configLoad(ssid, psk, uuid);
+    char ssid[64] = "WiFi-SSID";
+    char psk[64] = "WiFi-Password";
+    char api_host[64] = "";
+    char api_port[8] = "3000";
+    configLoad(ssid, psk, api_host, api_port);
 
     // Run webserver (blocks until config saved + reboot)
-    webserverRun(ssid, psk, uuid);
+    webserverRun(ssid, psk, api_host, api_port);
     // Never reaches here
   }
 
@@ -74,11 +76,12 @@ int main() {
   display.init();
 
   // ── Load WiFi credentials from flash or use defaults ──────────────────────
-  char ssid[64] = "AP1";
-  char psk[64] = "1154542275109433";
-  char uuid[64] = "";
+  char ssid[64] = "WiFi-SSID";
+  char psk[64] = "WiFi-Password";
+  char api_host[64] = "";
+  char api_port[8] = "3000";
 
-  if (!configLoad(ssid, psk, uuid)) {
+  if (!configLoad(ssid, psk, api_host, api_port)) {
     printf("No config in flash, using defaults\n");
   } else {
     printf("Loaded config from flash: ssid=%s\n", ssid);
@@ -107,6 +110,7 @@ int main() {
 
   // ── Application layer ─────────────────────────────────────────────────────
   ApiClient api;
+  api.init(api_host, (uint16_t)atoi(api_port));
   AppController controller(matrix, display, accept_btn, cancel_btn, api,
                            CAT_NAMES, CTR_NAMES);
 

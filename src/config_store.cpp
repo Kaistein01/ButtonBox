@@ -9,8 +9,8 @@
 // ── Flash storage layout ──────────────────────────────────────────────────────
 
 // Device config stored in the last sector of flash
-// Magic number to validate the config
-#define CONFIG_MAGIC 0xCAFEBABE
+// Magic number to validate the config (bumped when struct layout changes)
+#define CONFIG_MAGIC 0xCAFEBABF
 
 // Critical section for flash operations
 static critical_section_t flash_cs;
@@ -19,7 +19,8 @@ struct DeviceConfig {
   uint32_t magic;
   char ssid[64];
   char psk[64];
-  char uuid[64];
+  char api_host[64]; // API server IP address
+  char api_port[8];  // API server port as string, e.g. "3000"
 };
 
 // Compile-time check: DeviceConfig must fit in one flash sector (4096 bytes)
@@ -36,7 +37,7 @@ static constexpr uint32_t CONFIG_ADDRESS = XIP_BASE + CONFIG_OFFSET;
 
 // ── Public API ────────────────────────────────────────────────────────────────
 
-bool configLoad(char *ssid, char *psk, char *uuid) {
+bool configLoad(char *ssid, char *psk, char *api_host, char *api_port) {
   const DeviceConfig *cfg = (const DeviceConfig *)CONFIG_ADDRESS;
 
   // Check magic number
@@ -49,21 +50,26 @@ bool configLoad(char *ssid, char *psk, char *uuid) {
   ssid[63] = '\0';
   strncpy(psk, cfg->psk, 63);
   psk[63] = '\0';
-  strncpy(uuid, cfg->uuid, 63);
-  uuid[63] = '\0';
+  strncpy(api_host, cfg->api_host, 63);
+  api_host[63] = '\0';
+  strncpy(api_port, cfg->api_port, 7);
+  api_port[7] = '\0';
 
   return true;
 }
 
-void configSave(const char *ssid, const char *psk, const char *uuid) {
+void configSave(const char *ssid, const char *psk, const char *api_host,
+                const char *api_port) {
   DeviceConfig cfg;
   cfg.magic = CONFIG_MAGIC;
   strncpy(cfg.ssid, ssid, 63);
   cfg.ssid[63] = '\0';
   strncpy(cfg.psk, psk, 63);
   cfg.psk[63] = '\0';
-  strncpy(cfg.uuid, uuid, 63);
-  cfg.uuid[63] = '\0';
+  strncpy(cfg.api_host, api_host, 63);
+  cfg.api_host[63] = '\0';
+  strncpy(cfg.api_port, api_port, 7);
+  cfg.api_port[7] = '\0';
 
   // Flash write must not be interrupted
   critical_section_init(&flash_cs);
